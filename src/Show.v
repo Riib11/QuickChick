@@ -29,6 +29,11 @@ Class Show (A : Type) : Type :=
   show : A -> string
 }.
 
+Class ShowS (A : Type) : Type :=
+{
+  shows : A -> string -> string
+}.
+
 Fixpoint show_uint (n : uint) : string :=
   match n with
   | Nil => ""
