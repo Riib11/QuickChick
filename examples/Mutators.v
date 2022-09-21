@@ -3,16 +3,13 @@ From QuickChick Require Import QuickChick.
 Require Import List. Import ListNotations.
 Require Import String. Open Scope string.
 
-Inductive Tree (A : Type) :=
-| Leaf : Tree A
-| Node : A -> Tree A -> Tree A -> Tree A.
-
-Arguments Leaf {A}.
-Arguments Node {A}.
+Inductive Tree :=
+| Leaf : Tree
+| Node : nat -> Tree -> Tree -> Tree.
 
 Derive (Arbitrary, Show) for Tree. 
 
-Inductive bst : nat -> nat -> Tree nat -> Prop :=
+Inductive bst : nat -> nat -> Tree -> Prop :=
 | bst_leaf : forall lo hi, bst lo hi Leaf
 | bst_node : forall lo hi x l r,
     le (S lo) x ->  le (S x) hi ->
@@ -60,14 +57,14 @@ Proof.
 Qed.
 
 
-Definition bst_checker_prop :=
+(* Definition bst_checker_prop :=
   forAllMaybe (genST (fun t => bst 0 17 t)) (fun t => 
   forAll (choose (1, 16)) (fun x => 
-  bst 0 17 (insert x t) ?? 10)). (* *)
+  bst 0 17 (insert x t))).  *)
 (*  is_bst 0 17 (insert x t))). *)
 
-Extract Constant defNumTests => "20000".
-QuickChick bst_checker_prop. 
+(* Extract Constant defNumTests => "20000". *)
+(* QuickChick bst_checker_prop.  *)
 
 
 
