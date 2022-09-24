@@ -7,7 +7,7 @@ Inductive Tree :=
 | Leaf : Tree
 | Node : nat -> Tree -> Tree -> Tree.
 
-Derive (Arbitrary, Show) for Tree. 
+Derive (Arbitrary, Show, Sized) for Tree. 
 
 Inductive bst : nat -> nat -> Tree -> Prop :=
 | bst_leaf : forall lo hi, bst lo hi Leaf
@@ -32,39 +32,67 @@ Fixpoint is_bst (lo hi : nat) (t : Tree) :=
                (is_bst x hi r))
   end.
 
-Fixpoint insert (x : nat) (t : Tree) :=
-  match t with
-  | Leaf => Node x Leaf Leaf
-  | Node y l r =>
-    if x < y ? then
-      Node y (insert x l) r
-    else if x > y ? then
-      Node y l (insert x r)
-    else t
+Check @arbitraryST.
+
+Fixpoint mut_bst (lo hi: nat) (t: Tree) : G (option Tree) :=
+  match t return G (option Tree) with
+  | Leaf => ret (Some Leaf)
+  | Node x l r =>
+    bind (freq_ (ret true) [(1, ret true); (size t, ret false)]) (fun b =>
+      if b: bool then
+        (* mut here *)
+        @arbitraryST _ (fun t => bst lo hi t) _
+      else
+        (* mut in branch, weighted by size *)
+        freq_ (ret (Some t)) 
+          [ ( size l 
+            , bind (mut_bst lo x l) 
+              ( fun opt_l' => 
+                match opt_l' return G (option Tree) with
+                | Some l' => ret (Some (Node x l' r))
+                | None => ret None
+                end
+              ))
+          ; ( size l 
+            , bind (mut_bst x hi r) 
+              ( fun opt_r' => 
+                match opt_r' return G (option Tree) with
+                | Some r' => ret (Some (Node x l r'))
+                | None => ret None
+                end
+              )) ]
+    )
   end.
 
-Definition insert_preserves_bst (x : nat) (t : Tree) :=
-  if is_bst 0 10 t then
-    is_bst 0 10 (insert x t)
-  else true.
+Definition t1: Tree :=
+  Node 4
+    (Node 2
+      (Node 1 Leaf Leaf)
+      (Node 3 Leaf Leaf))
+    (Node 6
+      (Node 5 Leaf Leaf)
+      (Node 7 Leaf Leaf)).
 
-Theorem insert_preserves_bst_prop :
-  forall (x : nat) (t : Tree),
-    bst 0 10 t -> bst 0 10 t.
-Proof.
-  intros x t pf.
-  apply pf.
-Qed.
+Check @arbitraryST.
 
+Program Definition mut_preserves_bst (lo hi: nat): G bool :=
+  bind (@arbitraryST _ (fun t => bst lo hi t) _) (fun opt_t =>
+  match opt_t: option Tree return G bool with
+  | None => ret true
+  | Some t =>
+    bind (mut_bst lo hi t) (fun opt_t' =>
+      match opt_t': option Tree return G bool with
+      | None => ret true
+      | Some t' => ret (is_bst lo hi t')
+      end)
+  end).
 
-(* Definition bst_checker_prop :=
-  forAllMaybe (genST (fun t => bst 0 17 t)) (fun t => 
-  forAll (choose (1, 16)) (fun x => 
-  bst 0 17 (insert x t))).  *)
-(*  is_bst 0 17 (insert x t))). *)
+QuickChick mut_preserves_bst.
 
-(* Extract Constant defNumTests => "20000". *)
-(* QuickChick bst_checker_prop.  *)
-
-
-
+(* Program Definition mut_preserves_bst_prop :=
+  forAll (arbitrary: G nat) (fun lo =>
+  forAllMaybe (genST (fun hi => le lo hi)) (fun hi =>
+  forAllMaybe (genST (fun t => bst lo hi t)) (fun t =>
+  forAllMaybe (mut_bst lo hi t) (fun t' => 
+  _)))).
+ *)
