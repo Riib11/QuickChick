@@ -89,6 +89,7 @@ Program Definition mut_preserves_bst (lo hi: nat): G bool :=
 
 QuickChick mut_preserves_bst.
 
+(* TODO: not sure why this doesn't work... *)
 (* Program Definition mut_preserves_bst_prop :=
   forAll (arbitrary: G nat) (fun lo =>
   forAllMaybe (genST (fun hi => le lo hi)) (fun hi =>
