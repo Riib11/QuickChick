@@ -32,8 +32,6 @@ Fixpoint is_bst (lo hi : nat) (t : Tree) :=
                (is_bst x hi r))
   end.
 
-Check @arbitraryST.
-
 Fixpoint mut_bst (lo hi: nat) (t: Tree) : G (option Tree) :=
   match t return G (option Tree) with
   | Leaf => ret (Some Leaf)
@@ -72,8 +70,6 @@ Definition t1: Tree :=
     (Node 6
       (Node 5 Leaf Leaf)
       (Node 7 Leaf Leaf)).
-
-Check @arbitraryST.
 
 Program Definition mut_preserves_bst (lo hi: nat): G bool :=
   bind (@arbitraryST _ (fun t => bst lo hi t) _) (fun opt_t =>
