@@ -7,7 +7,16 @@ Inductive Ty :=
 | Unt : Ty
 | Arr : Ty -> Ty -> Ty.
 
-Derive (Show, Arbitrary, Sized) for Ty.
+Derive (Arbitrary, Sized) for Ty.
+
+Program Instance show_Ty : Show Ty := {
+  show :=
+    fix show' (ty: Ty) := 
+    match ty with 
+    | Unt => "*"
+    | Arr A B => "(" ++ show' A ++ " -> " ++ show' B ++ ")"
+    end
+}.
 
 Instance eq_Ty (t1 t2 : Ty) : Dec (t1 = t2).
 Proof. dec_eq. Qed.
@@ -18,7 +27,18 @@ Inductive Tm :=
 | Lam : Ty -> Tm -> Tm
 | App : Tm -> Tm -> Tm.
 
-Derive (Show, Arbitrary, Sized) for Tm.
+Derive (Arbitrary, Sized) for Tm.
+
+Program Instance show_Tm : Show Tm := {
+  show :=
+    fix show' (tm: Tm) :=
+    match tm with 
+    | Tt => "*"
+    | Var n => show n
+    | Lam A b => "(λ " ++ show A ++ " => " ++ show' b ++ ")"
+    | App f a => "(" ++ show' f ++ " " ++ show' a ++ ")"
+    end
+}.
 
 Definition Ctx := list Ty.
 
@@ -109,15 +129,16 @@ Fixpoint mut_typed (gamma: Ctx) (ty: Ty) (tm: Tm): G (option Tm) :=
   let mut_here: G (option Tm) :=
         bind (genST (fun tm' => typed gamma ty tm')) (fun opt_tm' =>
         match opt_tm' with 
-        | None => ret None
+        | None => ret (Some tm)
         | Some tm' => ret (Some tm')
         end)
   in
   match tm return G (option Tm) with 
-  | Tt => genST (fun t => typed gamma ty t)
+  | Tt => genST (fun t => typed gamma Unt t)
   | Var n =>
     freq_ (ret (Some tm))
-      [ (1, mut_here)
+      [ (* mut here *)
+        (1, mut_here)
       ; (* mut n *)
         ( List.length gamma
         , bind (genST (fun n' => typed_var gamma ty n')) (fun opt_n' =>
@@ -129,7 +150,8 @@ Fixpoint mut_typed (gamma: Ctx) (ty: Ty) (tm: Tm): G (option Tm) :=
       ]
   | Lam alpha b =>
     freq_ (ret (Some tm))
-      [ (1, mut_here)
+      [ (* mut here *)
+        (1, mut_here)
       ; (* mut b *)
         ( size b
         , match ty with 
@@ -145,7 +167,8 @@ Fixpoint mut_typed (gamma: Ctx) (ty: Ty) (tm: Tm): G (option Tm) :=
       ]
   | App f a =>
     freq_ (ret (Some tm))
-      [ (1, mut_here)
+      [ (* mut here *)
+        (1, mut_here)
       ; (* mut f *)
         ( size f
         , match infer_type gamma f with 
@@ -173,7 +196,50 @@ Fixpoint mut_typed (gamma: Ctx) (ty: Ty) (tm: Tm): G (option Tm) :=
       ] 
   end.
 
+Definition mut_preserves_typed_prop gamma ty :=
+  forAllMaybe (genST (fun tm => typed gamma ty tm)) (fun tm =>
+  forAllMaybe (mut_typed gamma ty tm) (fun tm' =>
+  is_typed gamma ty tm')).
+
+QuickChick (mut_preserves_typed_prop [Unt] (Unt)).
+(* QuickChick (mut_preserves_typed_prop [Unt] (Arr Unt Unt) (Lam Unt (Var 0))). *)
+
+Definition G1 := [Unt; (Arr Unt Unt)].
+Definition A1 := (Arr Unt Unt).
+Definition T1 := 
+  (App 
+    (Lam Unt (Var 1)) 
+    (App 
+      (Lam Unt (Var 1))
+      (Var 0))).
+Definition T2 :=
+  (App
+    (Lam Unt (Var 1))
+    (Var 0)).
+
+(* QuickChick (ret (is_typed G1 A1 T2)). *)
+
+QuickChick 
+  (mut_preserves_typed_prop
+    [Unt; (Arr Unt Unt)]
+    (Arr Unt Unt)
+    (App 
+      (Lam Unt (Var 1)) 
+      (App 
+        (Lam Unt (Var 1))
+        (Var 0)))
+  ).
+
 Sample (genST (fun tm => typed [] Unt tm)).
+
+Definition gen_is_typed (gamma: Ctx) (ty: Ty): G bool :=
+  bind (genST (fun tm => typed gamma ty tm)) (fun opt_tm =>
+  match opt_tm with 
+  | None => ret true 
+  | Some tm => ret (is_typed gamma ty tm)
+  end). 
+
+(* QuickChick gen_is_typed. *)
 
 Definition mut_preserves_typed (gamma: Ctx) (ty: Ty): G bool :=
   bind (genST (fun tm => typed gamma ty tm)) (fun opt_tm =>
@@ -187,4 +253,4 @@ Definition mut_preserves_typed (gamma: Ctx) (ty: Ty): G bool :=
     end)
   end).
 
-QuickChick mut_preserves_typed.
+(* QuickChick mut_preserves_typed. *)
