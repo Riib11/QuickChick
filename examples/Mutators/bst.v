@@ -7,7 +7,7 @@ Inductive Tree :=
 | Leaf : Tree
 | Node : nat -> Tree -> Tree -> Tree.
 
-Derive (Arbitrary, Show, Sized) for Tree. 
+Derive (Arbitrary, Sized, Show) for Tree. 
 
 Inductive bst : nat -> nat -> Tree -> Prop :=
 | bst_leaf : forall lo hi, bst lo hi Leaf
@@ -19,77 +19,77 @@ Inductive bst : nat -> nat -> Tree -> Prop :=
 Derive DecOpt for (le x y).
 
 Derive ArbitrarySizedSuchThat for (fun x => le y x).
+Derive ArbitrarySizedSuchThat for (fun x => le x y).
 Derive ArbitrarySizedSuchThat for (fun t => bst lo hi t).
 
 Derive DecOpt for (bst lo hi t).
+
+Definition genBetween lo hi: G (option nat) :=
+  if (lo <= hi)?
+    then
+      bindGenOpt (genST (fun x => le x (hi - lo))) (fun x => 
+      ret (Some (x + lo)))
+    else ret None.
 
 Fixpoint is_bst (lo hi : nat) (t : Tree) :=
   match t with
   | Leaf => true
   | Node x l r =>
-    andb ((lo < x /\ x < hi) ?)
+    andb ((lo <= x /\ x <= hi) ?)
          (andb (is_bst lo x l)
                (is_bst x hi r))
   end.
 
-Fixpoint mut_bst (lo hi: nat) (t: Tree) : G (option Tree) :=
-  match t return G (option Tree) with
-  | Leaf => ret (Some Leaf)
-  | Node x l r =>
-    bind (freq_ (ret true) [(1, ret true); (size t, ret false)]) (fun b =>
-      if b: bool then
-        (* mut here *)
-        @arbitraryST _ (fun t => bst lo hi t) _
-      else
-        (* mut in branch, weighted by size *)
-        freq_ (ret (Some t)) 
-          [ ( size l 
-            , bind (mut_bst lo x l) 
-              ( fun opt_l' => 
-                match opt_l' return G (option Tree) with
-                | Some l' => ret (Some (Node x l' r))
-                | None => ret None
-                end
-              ))
-          ; ( size l 
-            , bind (mut_bst x hi r) 
-              ( fun opt_r' => 
-                match opt_r' return G (option Tree) with
-                | Some r' => ret (Some (Node x l r'))
-                | None => ret None
-                end
-              )) ]
-    )
+Fixpoint maxNode x t: nat :=
+  match t with 
+  | Leaf => x
+  | Node y l r => maxNode y r
   end.
 
-Definition t1: Tree :=
-  Node 4
-    (Node 2
-      (Node 1 Leaf Leaf)
-      (Node 3 Leaf Leaf))
-    (Node 6
-      (Node 5 Leaf Leaf)
-      (Node 7 Leaf Leaf)).
+Fixpoint minNode x t: nat :=
+  match t with 
+  | Leaf => x
+  | Node y l r => minNode y l
+  end.
 
-Program Definition mut_preserves_bst (lo hi: nat): G bool :=
-  bind (@arbitraryST _ (fun t => bst lo hi t) _) (fun opt_t =>
-  match opt_t: option Tree return G bool with
-  | None => ret true
-  | Some t =>
-    bind (mut_bst lo hi t) (fun opt_t' =>
-      match opt_t': option Tree return G bool with
-      | None => ret true
-      | Some t' => ret (is_bst lo hi t')
-      end)
-  end).
+(* How much to weight branches, as a function of their size *)
+Definition mut_bst_branch_weighting (n: nat): nat := 2 * n.
 
-QuickChick mut_preserves_bst.
+Fixpoint mut_bst (lo hi: nat) (t: Tree) : G (option Tree) :=
+  let n := size t in 
+  (* preserves size *)
+  let mut_here: G (option Tree) :=
+        @arbitrarySizeST _ (fun t => bst lo hi t) _ n in
+  match t return G (option Tree) with
+  | Leaf => mut_here 
+  | Node x l r =>
+    backtrack
+      [ (* here *)
+        ( 1 , mut_here )
+      ; (* x *)
+        ( 1
+        , bindGenOpt (genBetween (maxNode lo l) (minNode hi r)) (fun x' =>
+          ret (Some (Node x' l r)))
+        )
+      ; (* l *)
+        ( mut_bst_branch_weighting (size l)
+        , bindGenOpt (mut_bst lo x l) (fun l' => 
+          ret (Some (Node x l' r)))
+        )
+      ; (* r *)
+        ( mut_bst_branch_weighting (size r)
+        , bindGenOpt (mut_bst x hi r) (fun r' => 
+          ret (Some (Node x l r')))
+        )
+      ]
+  end.    
 
-(* TODO: not sure why this doesn't work... *)
-(* Program Definition mut_preserves_bst_prop :=
-  forAll (arbitrary: G nat) (fun lo =>
-  forAllMaybe (genST (fun hi => le lo hi)) (fun hi =>
-  forAllMaybe (genST (fun t => bst lo hi t)) (fun t =>
-  forAllMaybe (mut_bst lo hi t) (fun t' => 
-  _)))).
- *)
+Definition mut_preserves_bst :=
+  forAll (arbitrary: G nat) (fun hi =>
+  forAllMaybe (genST (fun lo => lo <= hi)) (fun lo =>
+  forAllMaybe (@arbitraryST _ (fun t => bst lo hi t) _) (fun t =>
+  forAllMaybe (mut_bst lo hi t) (fun t' =>
+  ret (is_bst lo hi t')
+  )))).
+
+(* QuickChick mut_preserves_bst. *)
