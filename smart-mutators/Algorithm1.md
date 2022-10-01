@@ -2,40 +2,96 @@
 
 The inductive datatype to mutate over has the form
 
-```coq
+```ml
 Inductive <Dat> :=
-  i@[ | <DatCon i> : j@[ <DatConPrmTyp i,j> ] -> <Dat> ]
+  i@{ | <DatCon i> : 
+          (* parameters *)
+          j@{ _ : <DatConPrmTyp i,j> } ->
+          (* recursive parameters *)
+          k@{ <DatConRecPrm i,k> : <Dat> } ->
+          (* output *)
+          <Dat>
+  }
 ```
 
 The inductive relation to mutate with respect to has the form
 
-```coq
-Inductive <Rel> : i@[ <RelPrmType i> : Set ] -> <Dat> -> Prop :=
-  j@[ | <RelCon j> : 
-          -- constructor parameters
-          k@[ <RelConPrm j,k> : <RelConPrmTyp j,k> ] ->
-          -- constructor non-inductive hypotheses
-          l@[ <RelConHyp i,l> ] ->
-          -- inductive hypotheses
-          <Rel> i@[ <RelConIndHypArg i,j> ] <RelConIndHypArgDat j> ->
-          -- constructor output
-          <Rel> i@[ <RelConArg i,j> ] <RelConArgDat j>      
-    ]
+```ml
+Inductive <Rel> : i@{ <RelPrmType i> : Set } -> <Dat> -> Prop :=
+  j@{ | <RelCon j> : 
+          (* parameters *)
+          k@{ <RelConPrm j,k> : <RelConPrmTyp j,k> } ->
+          (* recursive paramters *)
+          l@{ <RecConRecPrm j,l> : <Dat> }
+          (* hypotheses *)
+          m@{ <RelConHyp j,m> -> }
+          (* inductive hypotheses *)
+          n@{ <Rel> i@{ <RelConIndHypArg j,n,i> } <RelConIndHypArgDat j,n> -> }
+          (* output *)
+          <Rel> i@{ <RelConArg j,i> } <RelConArgDat j>      
+  }
 ```
 
 Then, the mutation algorithm is the following:
 
-```coq
-mut i@[ <RelPrm i> : <RelPrmType i> ] (x: <Dat>): option (G <Dat>) :=
+```ml
+Definition mut 
+    `{Sized <Dat>}
+    i,j@{ `{Arbitrary <DatConPrmTyp j,j>} }
+    `{ArbitrarySizeST (fun (x : <Dat>) => <Rel> i@{ x<i> : <RelPrm i> } x}
+    i@{ <RelPrm i> : <RelPrmType i> }
+    (x : <Dat>) : 
+    option (G <Dat>) :=
   let n := size x in
-  let mut_here: G (option <Dat>) :=
-        arbitrarySizeST (fun x => <Rel> i@[ <RelPrm i> ] x) n in
   match x with
-  j@[
-    <RelCon j> k@[ <RelConArg j,k> ] =>
+  j@{
+    <DatCon j> k@{ <DatConArg j,k> } l@{ <DatConRecArg j,l> } =>
       backtrack
-        [ (1, mut_herre)
-
-        ] 
-  ]
+        [ (* mut this *) 
+          ( 1
+          , arbitrarySizeST (fun x => <Rel> i@{ <RelPrm i> } x) n )
+          k@{
+            #if <RelConArgDat k> ~ x #then
+            l@{
+              (* mut arg <DatConArg j,l> *)
+              ; ( 1   
+                , bindGenOpt 
+                    ( (* 
+                      generate/filter <RelConArg' j,l> such that 
+                        <RelConArg' j,l> satisfies each m@{ <RelConHyp l,m> }
+                        <RelConArg' j,l> satisfies each n@{ <RelConIndHyp l,n> }
+                      which involves generating/filtering parameters 
+                      not specified by the unification <RelConArgDat k> ~ x
+                      *)
+                    )
+                    (fun <RelConArg' j,l> =>
+                      ret (Some (<RelCon j> 
+                        l'@{ if l == l'
+                              then <RelConArg' j,l'> 
+                              else <RelConArg  j,l'> })) )
+                )
+            }
+            m@{
+              (* mut rec arg <DatConRecArg j,m>  *)
+              ; ( size <DatConRecArg j,m>
+                , bindGenOpt
+                    ( (* 
+                      generate/filter <RelConRecArg' j,l> such that 
+                        <RelConRecArg' j,l> satisfies each m@{ <RelConHyp l,m> }
+                        <RelConRecArg' j,l> satisfies each n@{ <RelConIndHyp l,n> }
+                        size <RelConRecArg' j,l> == size <RelConRecArg j,l>
+                      which involves generating/filtering parameters 
+                      not specified by the unification <RelConArgDat k> ~ x
+                      *)
+                    )
+                    (fun <RelConArg' j,l> =>
+                      ret (Some (<RelCon j> 
+                        l'@{ if l == l'
+                              then <RelConArg' j,l'> 
+                              else <RelConArg  j,l'> })) )
+                )
+            }
+          }
+        ]
+  }
 ```
