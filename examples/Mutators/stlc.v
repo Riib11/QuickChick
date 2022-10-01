@@ -163,6 +163,7 @@ Fixpoint mut_typed (gamma: Ctx) (ty: Ty) (tm: Tm): G (option Tm) :=
             end)
           | _ => ret None
           end
+        (* can't mut alpha since fixed by rel *)
         )
       ]
   | App f a =>
