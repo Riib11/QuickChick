@@ -68,8 +68,22 @@ Fixpoint mut_bst (lo hi: nat) (t: Tree) : G (option Tree) :=
         ( 1 , mut_here )
       ; (* x *)
         ( 1
-        , bindGenOpt (genBetween (maxNode lo l) (minNode hi r)) (fun x' =>
-          ret (Some (Node x' l r)))
+        (* specialized *)
+        (* , bindGenOpt (genBetween (maxNode lo l) (minNode hi r)) (fun x' => *)
+        (* generalized *)
+        , bindGenOpt
+            (backtrack [
+              ( 1
+              , bindGenOpt (genST (fun x => lo <= x)) (fun x' =>
+                  if
+                    (andb ((x' <= hi)?)
+                    (andb (is_bst lo x' l)
+                          (is_bst x' hi r)))
+                  then ret (Some x)
+                  else ret None)
+              )
+            ])
+            (fun x' => ret (Some (Node x' l r)))
         )
       ; (* l *)
         ( mut_bst_branch_weighting (size l)
@@ -92,4 +106,6 @@ Definition mut_preserves_bst :=
   ret (is_bst lo hi t')
   )))).
 
-(* QuickChick mut_preserves_bst. *)
+QuickChick mut_preserves_bst.
+
+Sample (mut_bst 0 100 (Node 50 (Node 25 Leaf Leaf) (Node 75 Leaf Leaf))).
