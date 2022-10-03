@@ -66,10 +66,15 @@ Definition mut
         *)
 
         (* NOTE:
-            _recombine_ can actually cover _regenerate arg_ as well, in the case
-            that the recombination chooses the same constructor and fixes all 
-            args except for one to be regenerated.     
+            _recombine_ covers _regenerate arg_ as well, in the cases that the 
+            recombination chooses the same constructor and fixes all args except
+            for one to be regenerated.     
         *)
+
+        (* NOTE:
+              _recombine_ covers _mutate child_ then _regenerate_ as well, in 
+              cases that recombination chooses the same constructor and fixes 
+              all args except for one recursive args to be regenerated.  *)
 
         (* recombine: replace this node, using at least one of its args *)
         <for j>{ (* range over <DatCon j> *)

@@ -118,7 +118,7 @@ Fixpoint mut_bst (lo hi: nat) (t: Tree) : G (option Tree) :=
       (* -------------------------------------------------------------------- *)
       (* recombine *)
       
-      (* recombine: Leaf [FAIL] *)
+      (* recombine: Leaf [EMPTY] *)
       (*    nothing to recombine with *)
       (*    nothing to recombine into *)
       (*    so, result will be same  *)
@@ -157,7 +157,7 @@ Fixpoint mut_bst (lo hi: nat) (t: Tree) : G (option Tree) :=
       (* -------------------------------------------------------------------- *)
       (* recombine *)
 
-      (* recombine: Leaf [FAIL] *)
+      (* recombine: Leaf [EMPTY] *)
       (*    nothing to recombine into *)
       
       (* recombine: Node x' l' r  via bst_Node *)
