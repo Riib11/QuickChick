@@ -44,53 +44,56 @@ Definition mut
     option (G <Dat>) :=
   let n := size x in
   match x with
-  j@{
+  j@{ (* range over dat cons: <DatCon j> *)
     <DatCon j> k@{ <DatConArg j,k> } l@{ <DatConRecArg j,l> } =>
       backtrack
         [ (* mut this *) 
           ( 1
           , arbitrarySizeST (fun x => <Rel> i@{ <RelPrm i> } x) n )
-          k@{
+          k@{ (* range over rel cons: <RelCon k>  *)
             #if <RelConArgDat k> ~ x #then
-            l@{
-              (* mut arg <DatConArg j,l> *)
-              ; ( 1   
-                , bindGenOpt 
-                    ( (* 
-                      generate/filter <RelConArg' j,l> such that 
-                        <RelConArg' j,l> satisfies each m@{ <RelConHyp l,m> }
-                        <RelConArg' j,l> satisfies each n@{ <RelConIndHyp l,n> }
-                      which involves generating/filtering parameters 
-                      not specified by the unification <RelConArgDat k> ~ x
-                      *)
-                    )
-                    (fun <RelConArg' j,l> =>
-                      ret (Some (<RelCon j> 
-                        l'@{ if l == l'
-                              then <RelConArg' j,l'> 
-                              else <RelConArg  j,l'> })) )
-                )
-            }
-            m@{
-              (* mut rec arg <DatConRecArg j,m>  *)
-              ; ( size <DatConRecArg j,m>
-                , bindGenOpt
-                    ( (* 
-                      generate/filter <RelConRecArg' j,l> such that 
-                        <RelConRecArg' j,l> satisfies each m@{ <RelConHyp l,m> }
-                        <RelConRecArg' j,l> satisfies each n@{ <RelConIndHyp l,n> }
-                        size <RelConRecArg' j,l> == size <RelConRecArg j,l>
-                      which involves generating/filtering parameters 
-                      not specified by the unification <RelConArgDat k> ~ x
-                      *)
-                    )
-                    (fun <RelConArg' j,l> =>
-                      ret (Some (<RelCon j> 
-                        l'@{ if l == l'
-                              then <RelConArg' j,l'> 
-                              else <RelConArg  j,l'> })) )
-                )
-            }
+              l@{ (* range over dat con args: <DatConArg j,l> *)
+                (* mut arg <DatConArg j,l> *)
+                ; ( 1   
+                  , bindGenOpt 
+                      ( (* 
+                        generate/filter <DatConArg' j,l> such that 
+                          <DatConArg' j,l> satisfies each m@{ <RelConHyp k,m> }
+                          <DatConArg' j,l> satisfies each 
+                            m,n@{ <RelConIndHyp k,m,n> }
+                        which involves generating/filtering parameters 
+                        not specified by the unification <RelConArgDat k> ~ x
+                        *)
+                      )
+                      (fun <DatConArg' j,l> =>
+                        ret (Some 
+                          (<DatCon j> 
+                              l'@{ if l == l'
+                                    then <RelConArg' j,l'> 
+                                    else <RelConArg  j,l'> })) )
+                  )
+              }
+            #end
+          }
+          m@{ (* range over dat con rec args: <DatConRecArg j,m> *)
+            (* mut rec arg <DatConRecArg j,m>  *)
+            ; ( size <DatConRecArg j,m>
+              , bindGenOpt
+                  ( (* 
+                    generate/filter <RelConRecArg' j,l> such that 
+                      <RelConRecArg' j,l> satisfies each m@{ <RelConHyp l,m> }
+                      <RelConRecArg' j,l> satisfies each n@{ <RelConIndHyp l,n> }
+                      size <RelConRecArg' j,l> == size <RelConRecArg j,l>
+                    which involves generating/filtering parameters 
+                    not specified by the unification <RelConArgDat k> ~ x
+                    *)
+                  )
+                  (fun <RelConArg' j,l> =>
+                    ret (Some (<RelCon j> 
+                      l'@{ if l == l'
+                            then <RelConArg' j,l'> 
+                            else <RelConArg  j,l'> })) )
+              )
           }
         ]
   }

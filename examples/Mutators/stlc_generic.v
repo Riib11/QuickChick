@@ -130,132 +130,38 @@ Derive ArbitrarySizedSuchThat for (fun t => typed gamma alpha t).
 (* mutation *)
 
 Fixpoint mut_typed (gamma: Ctx) (ty: Ty) (tm: Tm): G (option Tm) :=
-  let mut_here: G (option Tm) :=
+  let mut_this: G (option Tm) :=
         bind (genST (fun tm' => typed gamma ty tm')) (fun opt_tm' =>
         match opt_tm' with 
         | None => ret (Some tm)
         | Some tm' => ret (Some tm')
         end)
   in
-  match tm return G (option Tm) with 
-  | Tt => genST (fun t => typed gamma Unt t)
+  match tm return G (option Tm) with
+  (* no constructors of  *)
+  | Tt =>
+    backtrack
+      [ (* mut this *)
+        ( 1 , mut_this )
+        (* can't mutate via typed_Tt since everything is fixed *)
+      ]
   | Var n =>
-    freq_ (ret (Some tm))
-      [ (* mut here *)
-        (1, mut_here)
+    backtrack
+      [ (* mut this *)
+        ( 1 , mut_this )
+      (* cons of `typed .. (Var n)`: `typed_Var` *)
       ; (* mut n *)
-        ( List.length gamma
-        , bind (genST (fun n' => typed_var gamma ty n')) (fun opt_n' =>
-          match opt_n' return G (option Tm) with 
-          | None => ret (Some tm)
-          | Some n' => ret (Some (Var n'))
-          end)
+        ( List.length gamma (* TODO: how to derive this weight? *)
+        , bindGenOpt (genST (fun n' => typed_var gamma ty n')) (fun n' =>
+          ret (Some (Var n')) )
         )
       ]
   | Lam alpha b =>
-    freq_ (ret (Some tm))
-      [ (* mut here *)
-        (1, mut_here)
-      ; (* mut b *)
-        ( size b
-        , match ty with 
-          | Arr alpha beta =>
-            bind (mut_typed gamma beta b) (fun opt_b' =>
-            match opt_b' with 
-            | None => ret None
-            | Some b' => ret (Some (Lam alpha b'))
-            end)
-          | _ => ret None
-          end
-        (* can't mut alpha since fixed by rel *)
-        )
+    backtrack
+      [ (* mut this*)
+        ( 1 , mut_this )
+      (* cons of `typed .. (Lam alpha b)`: `typed_Lam` *)
+      ; (*  *)
       ]
-  | App f a =>
-    freq_ (ret (Some tm))
-      [ (* mut here *)
-        (1, mut_here)
-      ; (* mut f *)
-        ( size f
-        , match infer_type gamma f with 
-          | None => ret None
-          | Some phi =>
-            bind (mut_typed gamma phi f) (fun opt_f' =>
-            match opt_f' with 
-            | None => ret None
-            | Some f' => ret (Some (App f' a))
-            end)
-          end
-        )
-      ; (* mut a *)
-        ( size a 
-        , match infer_type gamma a with 
-          | None => ret None
-          | Some alpha =>
-            bind (mut_typed gamma alpha a) (fun opt_a' =>
-            match opt_a' with 
-            | None => ret None
-            | Some a' => ret (Some (App f a'))
-            end)
-          end
-        )
-      ] 
+  | _ => ret None
   end.
-
-Definition mut_preserves_typed_prop gamma ty :=
-  forAllMaybe (genST (fun tm => typed gamma ty tm)) (fun tm =>
-  forAllMaybe (mut_typed gamma ty tm) (fun tm' =>
-  is_typed gamma ty tm')).
-
-QuickChick (mut_preserves_typed_prop [Unt] (Unt)).
-(* QuickChick (mut_preserves_typed_prop [Unt] (Arr Unt Unt) (Lam Unt (Var 0))). *)
-
-Definition G1 := [Unt; (Arr Unt Unt)].
-Definition A1 := (Arr Unt Unt).
-Definition T1 := 
-  (App 
-    (Lam Unt (Var 1)) 
-    (App 
-      (Lam Unt (Var 1))
-      (Var 0))).
-Definition T2 :=
-  (App
-    (Lam Unt (Var 1))
-    (Var 0)).
-
-(* QuickChick (ret (is_typed G1 A1 T2)). *)
-
-QuickChick 
-  (mut_preserves_typed_prop
-    [Unt; (Arr Unt Unt)]
-    (Arr Unt Unt)
-    (App 
-      (Lam Unt (Var 1)) 
-      (App 
-        (Lam Unt (Var 1))
-        (Var 0)))
-  ).
-
-Sample (genST (fun tm => typed [] Unt tm)).
-
-Definition gen_is_typed (gamma: Ctx) (ty: Ty): G bool :=
-  bind (genST (fun tm => typed gamma ty tm)) (fun opt_tm =>
-  match opt_tm with 
-  | None => ret true 
-  | Some tm => ret (is_typed gamma ty tm)
-  end). 
-
-(* QuickChick gen_is_typed. *)
-
-Definition mut_preserves_typed (gamma: Ctx) (ty: Ty): G bool :=
-  bind (genST (fun tm => typed gamma ty tm)) (fun opt_tm =>
-  match opt_tm with 
-  | None => ret true 
-  | Some tm =>
-    bind (mut_typed gamma ty tm) (fun opt_tm' =>
-    match opt_tm' with 
-    | None => ret true 
-    | Some tm' => ret (is_typed gamma ty tm')
-    end)
-  end).
-
-(* QuickChick mut_preserves_typed. *)
