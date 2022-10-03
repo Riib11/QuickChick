@@ -70,7 +70,7 @@ Definition mut_bst_branch_weighting (n: nat): nat := 2 * n.
 
 (* Keeps generating values that satisfy the first property until one also 
    satisfies the second property. *)
-Definition arbitraryFilteredST {A : Type} 
+Definition genSTF {A : Type} 
     (P1 : A -> Prop) `{GenSuchThat A P1}
     (P2 : A -> bool) :
     G (option A) :=
@@ -81,10 +81,22 @@ Definition arbitraryFilteredST {A : Type}
         ret (Some a)
       else 
         ret None)
-      (* match P2 a with 
-      | Some b => ret (Some a)
-      | None => ret None
-      end) *)
+    )
+  ].
+
+(* Keeps generating values that satisfy the first property until one also 
+   satisfies the second property. *)
+Definition genSTF'
+    {A : Type}
+    (P : A -> Prop * bool) `{GenSuchThat A (fun a => fst (P a))} :
+    G (option A) :=
+  backtrack [
+    ( 1
+    , bindGenOpt (@arbitraryST A (fun a => fst (P a)) _) (fun a =>
+      if snd (P a)
+        then ret (Some a)
+        else ret None
+      )
     )
   ].
 
@@ -97,49 +109,115 @@ Fixpoint mut_bst (lo hi: nat) (t: Tree) : G (option Tree) :=
         @arbitrarySizeST _ (fun t => bst lo hi t) _ n in
   match t return G (option Tree) with 
   | Leaf => 
-    backtrack
-      [ 
-        (* regenerate *)
-        
-        ( 1
-        , regenerate )
-
-        (* recombine *)
-        
-        (* recombine: `Leaf` [FAIL]
-            nothing to recombine with
-            nothing to recombine into
-            so, result will be same  *)
-        
-        (* recombine: `Node Leaf r` via `bst_Node` *)
-      ; ( 1
-        , bindGenOpt (arbitraryFilteredST
-            (fun x => lo <= x) 
-            (fun x => allb [(x <= hi)? ; is_bst lo x Leaf])) (fun x =>
-          bindGenOpt (arbitraryFilteredST
-            (fun r => bst x hi r)
-            (fun r => allb [])) (fun r =>
-          ret (Some (Node x Leaf r))))
-        )
-        (* recombine: `Node l Leaf` via `bst_Node` *)
-      ; ( 1
-        , bindGenOpt (arbitraryFilteredST
-            (fun x => x <= hi) 
-            (fun x => allb [(lo <= x)? ; is_bst x hi Leaf])) (fun x =>
-          bindGenOpt (arbitraryFilteredST
-            (fun l => bst lo x l)
-            (fun l => allb [])) (fun l =>
-          ret (Some (Node x l Leaf))))
-        )
-        
-        (* splice *)
+    backtrack [ 
+      (* regenerate *)
       
+      ( 1
+      , regenerate )
 
-        (* traverse *)
+      (* -------------------------------------------------------------------- *)
+      (* recombine *)
       
+      (* recombine: Leaf [FAIL] *)
+      (*    nothing to recombine with *)
+      (*    nothing to recombine into *)
+      (*    so, result will be same  *)
+      
+      (* -------------------------------------------------------------------- *)
+      (* recombine: Node x Leaf r via bst_Node *)
+      (*    generate: x, l *)
+    ; ( 1
+      (* , bindGenOpt (genSTF (fun x => lo <= x) (fun x => allb [(x <= hi)? ; is_bst lo x Leaf])) (fun x =>
+        bindGenOpt (genSTF (fun r => bst x hi r) (fun r => allb [])) (fun r => *)
+      , bindGenOpt (genSTF' (fun x => (lo <= x, allb [(x <= hi)? ; is_bst lo x Leaf] ))) (fun x =>
+        bindGenOpt (genSTF' (fun r => bst x hi r, allb [])) (fun r =>
+        ret (Some (Node x Leaf r))))
+      )
+      
+      (* recombine: Node x l Leaf via bst_Node *)
+      (*    generate: x, l *)
+    ; ( 1
+      , bindGenOpt (genSTF (fun x => x <= hi) (fun x => allb [(lo <= x)? ; is_bst x hi Leaf])) (fun x =>
+        bindGenOpt (genSTF (fun l => bst lo x l) (fun l => allb [])) (fun l =>
+        ret (Some (Node x l Leaf))))
+      )
+      
+      (* -------------------------------------------------------------------- *)
+      (* mutate child *)
+      (* no children to mutate *)  
+    ]
+  | Node x l r =>
+    backtrack [
+      (* -------------------------------------------------------------------- *)
+      (* regenerate *)
         
-      ]
-  | _ => ret None
+      ( 1
+      , regenerate )
+
+      (* -------------------------------------------------------------------- *)
+      (* recombine *)
+
+      (* recombine: Leaf [FAIL] *)
+      (*    nothing to recombine into *)
+      
+      (* recombine: Node x' l' r  via bst_Node *)
+      (*    regenerate x', l' *)
+      ; ( 1
+        , bindGenOpt (genSTF (fun x' => x' <= lo) (fun x' => allb [(x' <= hi)? ; is_bst x' hi r])) (fun x' =>
+          bindGenOpt (genSTF (fun l' => bst lo x' l') (fun l' => allb [])) (fun l' =>
+          ret (Some (Node x' l' r))))
+        )    
+      
+      (* recombine: Node x' l  r' via bst_Node *)
+      (*    regenerate x', r' *)
+      ; ( 1
+        , bindGenOpt (genSTF (fun x' => x' <= lo) (fun x' => allb [(x' <= hi)? ; is_bst lo x' l])) (fun x' =>
+          bindGenOpt (genSTF (fun r' => bst lo x' r') (fun r' => allb [])) (fun r' =>
+          ret (Some (Node x' l r'))))
+        )
+      
+      (* recombine: Node x  l' r' via bst_Node *)
+      (*    regenerate l', r' *)
+      ; ( 1
+        , bindGenOpt (genSTF (fun l' => bst lo x l') (fun l' => allb [])) (fun l' =>
+          bindGenOpt (genSTF (fun r' => bst x hi r') (fun r' => allb [])) (fun r' =>
+          ret (Some (Node x l' r'))))
+        )
+      
+      (* recombine: Node x' l  r  via bst_Node *)
+      (*    regenerate x' *)
+      ; ( 1
+        , bindGenOpt (genSTF (fun x' => x' <= lo) (fun x' => allb [(x' <= hi)? ; is_bst lo x' l ; is_bst x' hi r])) (fun x' =>
+          ret (Some (Node x' l r)))
+        )
+      
+      (* recombine: Node x  l' r  via bst_Node *)
+      (*    regenerate l' *)
+      ; ( 1
+        , bindGenOpt (genSTF (fun l' => bst lo x l') (fun l' => allb [])) (fun l' =>
+          ret (Some (Node x l' r))) 
+        )
+      
+      (* recombine: Node x  l  r' via bst_Node *)
+      (*    regenerate r' *)
+      ; ( 1
+        , bindGenOpt (genSTF (fun r' => bst x hi r') (fun r' => allb [])) (fun r' =>
+          ret (Some (Node x l r')))
+        )
+
+      (* -------------------------------------------------------------------- *)
+      (* mutate child *)
+
+      (* mutate child: l *)
+      ; ( size l
+        , mut_bst lo x l
+        )
+
+      (* mutate child: r *)
+      ; ( size r
+        , mut_bst x hi r
+        )
+    ]
   end.
   
   match t return G (option Tree) with

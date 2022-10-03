@@ -51,11 +51,12 @@ Definition mut
     backtrack
       [ 
         (* regenerate: replace this node with a new generation *)
+        (*    preserves size *)
         ( 1
-        , bindGenOpt (genST (fun x' => <Rel> <for i>{<RelPrm i>} x'))
+        , bindGenOpt (arbitrarySizeST (fun x' => <Rel> <for i>{<RelPrm i>} x') (size x))
         )
 
-        (* NOTE
+        (* NOTE:
             Theres a common pattern is ranging over the relation constructors 
             that could possibly produce a relation on a term of a certain form,
             fixing the rest of the relation args. This involves unification, 
@@ -64,7 +65,13 @@ Definition mut
             that. 
         *)
 
-        (* recombine: replace this node, using its args *)
+        (* NOTE:
+            _recombine_ can actually cover _regenerate arg_ as well, in the case
+            that the recombination chooses the same constructor and fixes all 
+            args except for one to be regenerated.     
+        *)
+
+        (* recombine: replace this node, using at least one of its args *)
         <for j>{ (* range over <DatCon j> *)
           <for k>{ (* range over <RelCon k> *)
             (* check that <RelCon k> can produce <Rel> <for i>{<RelPrm i>} <DatCon j> *)
@@ -83,7 +90,8 @@ Definition mut
           }
         }
 
-        (* splice: replace an arg *)
+        (* regenerate arg: replace an arg with a fresh generation *)
+        (*    non-recursive *)
         <for k>{ (* range over <RelCon k> *)
           <if>{unify (<RelConArgDat k>) x} {
             <for k>{ (* range over <DatConPrm i,j> *)
@@ -102,26 +110,8 @@ Definition mut
             }            
           }
         }
-
-        (* traverse: mutate a different node among this node's descendants *)
-        <for k>{ (* range over <RelCon k> *)
-          <if>{unify (<RelConArgDat k>) x} {
-            <for k>{ (* range over <DatConPrm i,j> *)
-              ; ( 1 (* TODO: special weight? *)
-              , (*  generate/filter 
-                      <DatConPrm' i,j> 
-                    such that it satisfies
-                      <for n>{<RelConHyp k,n>}, o@{<RelConIndHyp k,o>} *)
-                ret (Some (
-                  <DatCon i>
-                    j'@{<if>{j = j'} 
-                          <then>{<DatConPrm' i,j'>} 
-                          <else>{<DatConPrm i,j'>}} 
-                    <for k>{<DatConRecPrm i,k>}))
-              )
-            }            
-          }
-        }
+        
+        (* mutate child: mutate a different node among this node's descendants *)
         <for k>{ (* range over <DatConRecPrm k> *)
           <for l>{ (* range over <RelCon l> *)
             (* TODO: conditions when can traverse mut via <RelCon l> *)
